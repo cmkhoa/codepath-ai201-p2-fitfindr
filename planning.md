@@ -163,77 +163,47 @@ For each tool, describe the specific failure mode you're handling and what the a
      the planning loop and each individual tool. -->
 
 ---
-+-----------------------------------+
-                  |      User Input & Wardrobe        |
-                  +-----------------------------------+
-                                    |
-                                    v
-                  +-----------------------------------+
-                  |    Initialize Session State       |
-                  +-----------------------------------+
-                                    |
-                                    v
-                  +-----------------------------------+
-                  |    LLM: Parse Query Parameters    |
-                  +-----------------------------------+
-                                    |
-                                    v
-                  +-----------------------------------+
-                  |     Tool 1: search_listings       | <-------------+
-                  +-----------------------------------+               |
-                                    |                                 |
-                   (Are matching listings found?)                     |
-                                  /   \                               |
-                            YES  /     \  NO                          |
-                                /       \                             |
-                               v         v                            |
-          +------------------------+   +------------------------+     | (Retry with
-          | Save to Search Results |   |  Broaden Constraints   | ----+ new params)
-          +------------------------+   |  (+25% Price, No Size) |
-                       |               +------------------------+
-                       |                            |
-                       v                    (Still no matches?)
-          +------------------------+               / \
-          | Select Top Match       |         YES  /   \
-          | (session[selected_item])             /     \
-          +------------------------+            v       v
-                       |              +-----------+   +---------------+
-                       |              | Log Error |   | Proceed with  |
-                       |              | & Abort   |   | Wider Match   |
-                       |              +-----------+   +---------------+
-                       |                    |                 |
-                       |                    v                 |
-                       |               (( EXIT ))             |
-                       |                                      |
-                       +------------------+-------------------+
-                                          |
-                                          v
-                        ====================================
-                        |       CENTRAL SESSION STATE      |
-                        |  Stores variables step-by-step   |
-                        ====================================
-                                 /        |        \
-                                /         |         \
-                               v          v          v
-          +------------------------+  +------------------------+  +------------------------+
-          | Tool 4: compare_listing|  | Tool 2: suggest_outfit |  | Tool 3: create_fit_card|
-          +------------------------+  +------------------------+  +------------------------+
-          | Queries DB directly to |  | Combines new item with |  | Generates Instagram    |
-          | calculate price diffs  |  | wardrobe. Fallbacks to |  | caption using outfit   |
-          | and deal value rating. |  | generic styling tips.  |  | and selected_item.     |
-          +------------------------+  +------------------------+  +------------------------+
-                               \          |          /
-                                \         |         /
-                                 v        v        v
-                        ====================================
-                        |       CENTRAL SESSION STATE      |
-                        |   (Fully Populated State Dict)   |
-                        ====================================
-                                          |
-                                          v
-                  +-----------------------------------+
-                  |    Final Markdown Output to User  |
-                  +-----------------------------------+
+'''
+[ User Input + Wardrobe ]
+                   |
+                   v
+       [ Step 1: Parse Query ]  --> (Extracts terms, size, max_price)
+                   |
+                   v
+    +---> [ Step 2: Search DB ]
+    |              |
+    |      (Match found?)
+    |         /        \
+    |       YES         NO --> [ Fallback: Broaden Params ]
+    |        |                     (Price +25%, Drop Size)
+    |        |                               |
+    |        v                               v
+    |  [ Select Item ]             (Still no matches?)
+    |                                  /        \
+    |                            Still NO       YES
+    |                               /              \
+    |                       [ Abort & Error ]       |
+    |                                               |
+    +-----------------------------------------------+
+                   |
+                   v
+     =============================
+     =   CENTRAL SESSION STATE   =  <-- (Holds selected_item & query)
+     =============================
+         |           |           |
+         v           v           v
+     [Step 3]    [Step 4]    [Step 5]
+     Compare      Suggest    Create
+     Price        Outfit     Fit Card
+         \           |           /
+          v          v          v
+     =============================
+     =   UPDATED SESSION STATE   =  <-- (Holds all final outputs)
+     =============================
+                   |
+                   v
+        [ Final Markdown Output ]
+'''
 
 ## AI Tool Plan
 
