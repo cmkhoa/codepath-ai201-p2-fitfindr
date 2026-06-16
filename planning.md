@@ -163,7 +163,7 @@ For each tool, describe the specific failure mode you're handling and what the a
      the planning loop and each individual tool. -->
 
 ---
-'''
+```
 [ User Input + Wardrobe ]
                    |
                    v
@@ -203,7 +203,7 @@ For each tool, describe the specific failure mode you're handling and what the a
                    |
                    v
         [ Final Markdown Output ]
-'''
+```
 
 ## AI Tool Plan
 
