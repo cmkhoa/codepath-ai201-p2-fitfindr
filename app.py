@@ -43,8 +43,53 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
            string and return it along with session["outfit_suggestion"] and
            session["fit_card"].
     """
-    # TODO: implement this function
-    return "Agent not yet implemented.", "", ""
+    # 1. Guard against an empty query.
+    if not user_query or not user_query.strip():
+        return "Please enter what you're looking for.", "", ""
+
+    # 2. Select the wardrobe based on the radio choice.
+    wardrobe = (
+        get_empty_wardrobe()
+        if wardrobe_choice == "Empty wardrobe (new user)"
+        else get_example_wardrobe()
+    )
+
+    # 3. Run the planning loop.
+    session = run_agent(user_query.strip(), wardrobe)
+
+    # 4. Error branch — show the error in panel 1, leave the others empty.
+    if session["error"]:
+        note = session.get("fallback_adjusted")
+        msg = f"{session['error']}" + (f"\n\n({note})" if note else "")
+        return msg, "", ""
+
+    # 5. Format the selected listing into a readable block.
+    item = session["selected_item"]
+    price = item.get("price")
+    price_str = f"${price:.2f}" if isinstance(price, (int, float)) else str(price)
+    listing_lines = [
+        item.get("title", "(no title)"),
+        f"Price: {price_str}",
+        f"Platform: {item.get('platform', '—')}",
+        f"Size: {item.get('size', '—')}",
+        f"Condition: {item.get('condition', '—')}",
+    ]
+
+    comp = session.get("price_comparison")
+    if comp:
+        diff = comp["difference_percent"]
+        sign = "+" if diff > 0 else ""
+        listing_lines.append(
+            f"Deal check: {comp['deal_rating']} "
+            f"(avg ${comp['average_price']:.2f}, {sign}{diff}% vs avg)"
+        )
+
+    listing_lines += ["", item.get("description", "")]
+    if session.get("fallback_adjusted"):
+        listing_lines.insert(0, f"⚠ {session['fallback_adjusted']}\n")
+    listing_text = "\n".join(listing_lines)
+
+    return listing_text, session["outfit_suggestion"], session["fit_card"]
 
 
 # ── interface ─────────────────────────────────────────────────────────────────

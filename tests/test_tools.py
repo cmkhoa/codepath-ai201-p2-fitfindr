@@ -14,7 +14,7 @@ _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from tools import create_fit_card, search_listings, suggest_outfit  # noqa: E402
+from tools import compare_listing, create_fit_card, search_listings, suggest_outfit  # noqa: E402
 from utils.data_loader import get_example_wardrobe  # noqa: E402
 
 
@@ -109,3 +109,100 @@ def test_create_fit_card_returns_caption():
     assert isinstance(caption, str)
     assert len(caption.strip()) > 0
     assert "error" not in caption.lower()[:30]
+
+
+# ── compare_listing ───────────────────────────────────────────────────────────
+
+def _item(price: float, category: str = "tops", tags=None, item_id: str = "lst_test") -> dict:
+    """Build a minimal listing-shaped dict for compare_listing tests."""
+    return {
+        "id": item_id,
+        "title": "Test Item",
+        "category": category,
+        "style_tags": tags if tags is not None else ["vintage", "graphic tee"],
+        "price": price,
+    }
+
+
+def test_compare_listing_returns_expected_keys():
+    """Standard input: returns a dict with the three documented keys."""
+    result = compare_listing(_item(price=22.0))
+    assert isinstance(result, dict)
+    assert set(result.keys()) == {"average_price", "difference_percent", "deal_rating"}
+    assert isinstance(result["average_price"], float)
+    assert isinstance(result["difference_percent"], float)
+    assert result["deal_rating"] in {"Good Deal", "Fair Price", "Overpriced"}
+
+
+def test_compare_listing_good_deal_when_well_below_average():
+    """A tops item at $10 sits ~50% below the ~$22 tops avg → Good Deal."""
+    result = compare_listing(_item(price=10.0, category="tops"))
+    assert result is not None
+    assert result["deal_rating"] == "Good Deal"
+    assert result["difference_percent"] < -10
+
+
+def test_compare_listing_overpriced_when_well_above_average():
+    """A tops item at $80 sits well above the ~$22 tops avg → Overpriced."""
+    result = compare_listing(_item(price=80.0, category="tops"))
+    assert result is not None
+    assert result["deal_rating"] == "Overpriced"
+    assert result["difference_percent"] > 10
+
+
+def test_compare_listing_fair_price_near_average():
+    """An outerwear item at $44 sits at the ~$44 outerwear avg → Fair Price."""
+    result = compare_listing(
+        _item(price=44.0, category="outerwear", tags=["vintage"])
+    )
+    assert result is not None
+    assert result["deal_rating"] == "Fair Price"
+    assert -10 <= result["difference_percent"] <= 10
+
+
+def test_compare_listing_excludes_the_item_itself():
+    """If the input matches a real listing's id, that listing must be excluded
+    from the average so the item can't be its own comparable."""
+    # lst_002 is the Y2K Baby Tee at $18 in tops — re-priced to $5 here.
+    re_priced = _item(price=5.0, category="tops", item_id="lst_002")
+    result = compare_listing(re_priced)
+    assert result is not None
+    # The real lst_002 ($18) must NOT be averaged in: 5 is FAR below tops avg → Good Deal.
+    assert result["deal_rating"] == "Good Deal"
+
+
+def test_compare_listing_none_input_returns_none():
+    assert compare_listing(None) is None
+
+
+def test_compare_listing_non_dict_input_returns_none():
+    assert compare_listing("not a dict") is None
+    assert compare_listing(123) is None
+
+
+def test_compare_listing_missing_price_returns_none():
+    assert compare_listing({"category": "tops"}) is None
+
+
+def test_compare_listing_missing_category_returns_none():
+    assert compare_listing({"price": 25.0}) is None
+
+
+def test_compare_listing_invalid_price_type_returns_none():
+    assert compare_listing(_item(price="cheap")) is None  # type: ignore[arg-type]
+
+
+def test_compare_listing_unknown_category_returns_none():
+    """A category that doesn't appear in the dataset has no comparables → None."""
+    result = compare_listing(_item(price=20.0, category="not_a_real_category"))
+    assert result is None
+
+
+def test_compare_listing_difference_percent_sign_matches_price():
+    """Sanity check: difference_percent is negative when the item is below avg
+    and positive when above — same direction as price minus average."""
+    low = compare_listing(_item(price=10.0, category="tops"))
+    high = compare_listing(_item(price=80.0, category="tops"))
+    assert low is not None and high is not None
+    assert low["difference_percent"] < 0
+    assert high["difference_percent"] > 0
