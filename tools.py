@@ -226,6 +226,70 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
     return response.choices[0].message.content.strip()
 
 
+# ── Tool 4: compare_listing ───────────────────────────────────────────────────
+
+def compare_listing(selected_item: dict) -> dict | None:
+    """
+    Compare the selected item's price against comparable listings in the dataset.
+
+    Comparables are items in the same category, excluding the item itself.
+    If at least two of those also share a style tag with the selected item,
+    the comparison is narrowed to that tag-matched subset (tighter signal).
+
+    Args:
+        selected_item: The listing dict returned by search_listings.
+
+    Returns:
+        {
+          "average_price":     float,  # rounded to 2 decimals
+          "difference_percent": float, # negative = item is below average
+          "deal_rating":       "Good Deal" | "Fair Price" | "Overpriced",
+        }
+        or None if comparison can't be done (missing fields, no comparables, etc.).
+    """
+    if not isinstance(selected_item, dict):
+        return None
+
+    price = selected_item.get("price")
+    category = selected_item.get("category")
+    if not isinstance(price, (int, float)) or not category:
+        return None
+
+    listings = load_listings()
+    item_id = selected_item.get("id")
+    item_tags = set(selected_item.get("style_tags") or [])
+
+    same_category = [
+        l for l in listings
+        if l.get("category") == category
+        and l.get("id") != item_id
+        and isinstance(l.get("price"), (int, float))
+    ]
+    if not same_category:
+        return None
+
+    tag_matched = [l for l in same_category if item_tags & set(l.get("style_tags") or [])]
+    comparables = tag_matched if len(tag_matched) >= 2 else same_category
+
+    avg = sum(l["price"] for l in comparables) / len(comparables)
+    if avg <= 0:
+        return None
+
+    diff_pct = ((price - avg) / avg) * 100.0
+    if diff_pct <= -10:
+        rating = "Good Deal"
+    elif diff_pct <= 10:
+        rating = "Fair Price"
+    else:
+        rating = "Overpriced"
+
+    return {
+        "average_price": round(avg, 2),
+        "difference_percent": round(diff_pct, 1),
+        "deal_rating": rating,
+    }
+
+
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────
 
 def create_fit_card(outfit: str, new_item: dict) -> str:
